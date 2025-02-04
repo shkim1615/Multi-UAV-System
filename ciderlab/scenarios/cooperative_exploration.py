@@ -1,6 +1,7 @@
 #  Copyright (c) 2022-2024.
 #  ProrokLab (https://www.proroklab.org/)
 #  All rights reserved.
+
 import typing
 from typing import Callable, Dict, List
 
@@ -20,16 +21,29 @@ if typing.TYPE_CHECKING:
 
 class Scenario(BaseScenario):
     def make_world(self, batch_dim: int, device: torch.device, **kwargs):
+        # batch_dim: 배치 처리 크기. 멀티 에이전트 시뮬레이션을 한 번에 여러 환경에서 병렬로 실행할 때 사용
+        # **kwargs: 시뮬레이션 설정을 유연하게 받기 위한 키워드 인자
+        
+        # 이거 하나는 베이스 시나리오에 있는거고
         self.plot_grid = False
+        
+        ## ====================================================================================================
+        # 여기부터는 kwargs에서 입력을 받으면 거기에서 꺼내오는 거고
+        # 근데 순서는 상관이 없는 건지. 존재하지 않으면 어떻게 되는건지 모르겠음
         self.n_agents = kwargs.pop("n_agents", 4)
         self.collisions = kwargs.pop("collisions", True)
 
         self.world_spawning_x = kwargs.pop(
             "world_spawning_x", 1
         )  # X-coordinate limit for entities spawning
+        
+        # 아래의 두 항목이 적용되는 것이 드론이나 탐색 지점이냐
+        # 월드 내 객체가 생성될 x, y 범위
         self.world_spawning_y = kwargs.pop(
             "world_spawning_y", 1
         )  # Y-coordinate limit for entities spawning
+        
+        # 월드의 경계 제한을 활성화할지 여부
         self.enforce_bounds = kwargs.pop(
             "enforce_bounds", False
         )  # If False, the world is unlimited; else, constrained by world_spawning_x and world_spawning_y.
@@ -49,7 +63,9 @@ class Scenario(BaseScenario):
 
         self.agent_collision_penalty = kwargs.pop("agent_collision_penalty", -1)
         ScenarioUtils.check_kwargs_consumed(kwargs)
+        ## ====================================================================================================
 
+        # 위에서 가져온 값으로 뭐 기준을 세우는 듯
         self.min_distance_between_entities = self.agent_radius * 2 + 0.05
         self.min_collision_distance = 0.005
 
@@ -60,6 +76,9 @@ class Scenario(BaseScenario):
             self.x_semidim = None
             self.y_semidim = None
 
+        # 제약 조건 확인
+        # 공동 목표, 개별 목표에 따라 설정이 달라지는데
+        # assert가 뭐임
         assert 1 <= self.agents_with_same_goal <= self.n_agents
         if self.agents_with_same_goal > 1:
             assert (
@@ -78,11 +97,12 @@ class Scenario(BaseScenario):
         world = World(
             batch_dim,
             device,
-            substeps=2,
+            substeps=2,                     # 물리엔진의 시뮬레이션 단계
             x_semidim=self.x_semidim,
             y_semidim=self.y_semidim,
         )
 
+        # 에이전트 색상 
         known_colors = [
             (0.22, 0.49, 0.72),
             (1.00, 0.50, 0),
@@ -97,6 +117,7 @@ class Scenario(BaseScenario):
         )
         entity_filter_agents: Callable[[Entity], bool] = lambda e: isinstance(e, Agent)
 
+        # 각 에이전트를 생성하고 월드에 추가
         # Add agents
         for i in range(self.n_agents):
             color = (
@@ -105,6 +126,7 @@ class Scenario(BaseScenario):
                 else colors[i - len(known_colors)]
             )
 
+            # Agent는 시뮬레이션 내에서 개별 행동을 담당하는 객체
             # Constraint: all agents have same action range and multiplier
             agent = Agent(
                 name=f"agent_{i}",
@@ -118,7 +140,7 @@ class Scenario(BaseScenario):
                             world,
                             n_rays=self.n_lidar_rays,
                             max_range=self.lidar_range,
-                            entity_filter=entity_filter_agents,
+                            entity_filter=entity_filter_agents,     # 다른 에이전트만 감지하도록 필터링
                         ),
                     ]
                     if self.collisions
@@ -129,6 +151,8 @@ class Scenario(BaseScenario):
             agent.agent_collision_rew = agent.pos_rew.clone()
             world.add_agent(agent)
 
+            # 각 에이전트마다 별도의 목표 지점을 생성하고 연결
+            # Landmark는 단순한 위치 목표로 충돌하지 않음
             # Add goals
             goal = Landmark(
                 name=f"goal {i}",
@@ -138,30 +162,40 @@ class Scenario(BaseScenario):
             world.add_landmark(goal)
             agent.goal = goal
 
+        # 보상 변수를 초기화하여 각 에이전트의 성과를 추적
+        # pos_rew: 위치 기반 보상
+        # final_rew: 최종 보상
+        # 무슨 말이지 각각의 에이전트 개별로 보상을 축적한다는 말인가. 이거는 협동 게임이 아닌가
         self.pos_rew = torch.zeros(batch_dim, device=device)
         self.final_rew = self.pos_rew.clone()
 
         return world
 
+    # env_index를 통해서 병렬 실행 중인 환경들 중에 특정 환경 선태 가능
+    # None이 들어가면 모든 환경 초기화
     def reset_world_at(self, env_index: int = None):
+        # 에이전트 무작위 배치
         ScenarioUtils.spawn_entities_randomly(
             self.world.agents,
             self.world,
             env_index,
-            self.min_distance_between_entities,
+            self.min_distance_between_entities,                     # 에이전트 간 최소 거리 제한을 통해 겹치지 않게 함
             (-self.world_spawning_x, self.world_spawning_x),
             (-self.world_spawning_y, self.world_spawning_y),
         )
 
+        # 현재 배치된 에이전트 위치 저장
         occupied_positions = torch.stack(
             [agent.state.pos for agent in self.world.agents], dim=1
         )
+        # env_index가 주어질 경우 해당 환경에만 적용
         if env_index is not None:
             occupied_positions = occupied_positions[env_index].unsqueeze(0)
 
+        # 목표 위치 무작위 배치
         goal_poses = []
         for _ in self.world.agents:
-            position = ScenarioUtils.find_random_pos_for_entity(
+            position = ScenarioUtils.find_random_pos_for_entity(        # 최소 거리 조건을 만족하면서 겹치지 않는 좌표 찾기
                 occupied_positions=occupied_positions,
                 env_index=env_index,
                 world=self.world,
@@ -170,8 +204,10 @@ class Scenario(BaseScenario):
                 y_bounds=(-self.world_spawning_y, self.world_spawning_y),
             )
             goal_poses.append(position.squeeze(1))
+            # 새로 할당된 목표 위치를 기존의 위치들과 병합하여 다른 위치와의 충돌 방지
             occupied_positions = torch.cat([occupied_positions, position], dim=1)
 
+        # 목표 위치 할당
         for i, agent in enumerate(self.world.agents):
             if self.split_goals:
                 goal_index = int(i // self.agents_with_same_goal)
@@ -197,16 +233,20 @@ class Scenario(BaseScenario):
                 )
 
     def reward(self, agent: Agent):
+        # 현재 에이전트가 첫 번째 에이전트인지 확인
+        # 이게 대체 무슨 문법인데. 그리고 이걸 왜 확인하는데
         is_first = agent == self.world.agents[0]
 
         if is_first:
             self.pos_rew[:] = 0
             self.final_rew[:] = 0
 
+            # 각 에이전트의 위치 기반 보상 계산
             for a in self.world.agents:
                 self.pos_rew += self.agent_reward(a)
-                a.agent_collision_rew[:] = 0
+                a.agent_collision_rew[:] = 0                # 충돌 상태 초기화
 
+            # 모든 에이전트 목표 도달 확인
             self.all_goal_reached = torch.all(
                 torch.stack([a.on_goal for a in self.world.agents], dim=-1),
                 dim=-1,
@@ -214,6 +254,7 @@ class Scenario(BaseScenario):
 
             self.final_rew[self.all_goal_reached] = self.final_reward
 
+            # 에이전트 간 충돌 감지 패널티 부여
             for i, a in enumerate(self.world.agents):
                 for j, b in enumerate(self.world.agents):
                     if i <= j:
@@ -230,6 +271,7 @@ class Scenario(BaseScenario):
         pos_reward = self.pos_rew if self.shared_rew else agent.pos_rew
         return pos_reward + self.final_rew + agent.agent_collision_rew
 
+    # 에이전트의 위치 기반 보상
     def agent_reward(self, agent: Agent):
         agent.distance_to_goal = torch.linalg.vector_norm(
             agent.state.pos - agent.goal.state.pos,
@@ -243,12 +285,15 @@ class Scenario(BaseScenario):
         return agent.pos_rew
 
     def observation(self, agent: Agent):
+        # 목표 지점을 에이전트의 상대 좌표로 기록
         goal_poses = []
-        if self.observe_all_goals:
+        if self.observe_all_goals:                                          # 모든 에이전트의 목표에 대한 상대 위치 관찰
             for a in self.world.agents:
                 goal_poses.append(agent.state.pos - a.goal.state.pos)
-        else:
+        else:                                                               # 해당 에이전트의 목표에 대한 상대 위치만 관찰
             goal_poses.append(agent.state.pos - agent.goal.state.pos)
+            
+        # 관찰 데이터 결합
         return torch.cat(
             [
                 agent.state.pos,
@@ -310,7 +355,7 @@ class Scenario(BaseScenario):
 
         return geoms
 
-
+## 여기는 사용 안하는듯..?
 class HeuristicPolicy(BaseHeuristicPolicy):
     def __init__(self, clf_epsilon=0.2, clf_slack=100.0, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -412,6 +457,6 @@ class HeuristicPolicy(BaseHeuristicPolicy):
 
 if __name__ == "__main__":
     render_interactively(
-        __file__,
+        "cooperative_exploration",
         control_two_agents=True,
     )
