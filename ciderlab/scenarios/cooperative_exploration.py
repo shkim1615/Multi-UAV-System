@@ -234,7 +234,7 @@ class Scenario(BaseScenario):
 
     def reward(self, agent: Agent):
         # 현재 에이전트가 첫 번째 에이전트인지 확인
-        # 이게 대체 무슨 문법인데. 그리고 이걸 왜 확인하는데
+        # 현재 받은 매개변수 에이전트가 첫 번째 에이전트인지 확인해서 나온 boolean 값을 넣음
         is_first = agent == self.world.agents[0]
 
         if is_first:
