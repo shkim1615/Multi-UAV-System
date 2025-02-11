@@ -30,6 +30,10 @@ class Scenario(BaseScenario):
         # 근데 순서는 상관이 없는 건지. 존재하지 않으면 어떻게 되는건지 모르겠음
         self.n_agents = kwargs.pop("n_agents", 4)
         self.collisions = kwargs.pop("collisions", True)
+        
+        ## 추가
+        self.n_targets = kwargs.pop("n_targets", 10)
+        self.target_cost = kwargs.pop("target_cost", 4)
 
         self.world_spawning_x = kwargs.pop(
             "world_spawning_x", 1
@@ -149,16 +153,18 @@ class Scenario(BaseScenario):
             agent.agent_collision_rew = agent.pos_rew.clone()
             world.add_agent(agent)
 
+        self.targets = []
+        for i in range(self.n_targets):
             # 각 에이전트마다 별도의 목표 지점을 생성하고 연결
             # Landmark는 단순한 위치 목표로 충돌하지 않음
             # Add goals
-            goal = Landmark(
-                name=f"goal {i}",
+            target = Landmark(
+                name=f"target {i}",
                 collide=False,
                 color=color,
             )
-            world.add_landmark(goal)
-            agent.goal = goal
+            world.add_landmark(target)
+            agent.goal = target
 
         # 보상 변수를 초기화하여 각 에이전트의 성과를 추적
         # pos_rew: 위치 기반 보상
