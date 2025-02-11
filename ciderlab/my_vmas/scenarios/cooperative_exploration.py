@@ -8,7 +8,6 @@ from typing import Callable, Dict, List
 import torch
 from torch import Tensor
 
-from vmas import render_interactively
 from vmas.simulator.core import Agent, Entity, Landmark, Sphere, World
 from vmas.simulator.heuristic_policy import BaseHeuristicPolicy
 from vmas.simulator.scenario import BaseScenario
@@ -17,7 +16,6 @@ from vmas.simulator.utils import Color, ScenarioUtils, X, Y
 
 if typing.TYPE_CHECKING:
     from vmas.simulator.rendering import Geom
-
 
 class Scenario(BaseScenario):
     def make_world(self, batch_dim: int, device: torch.device, **kwargs):
@@ -78,7 +76,7 @@ class Scenario(BaseScenario):
 
         # 제약 조건 확인
         # 공동 목표, 개별 목표에 따라 설정이 달라지는데
-        # assert가 뭐임
+        # assert: 조건 확인과 디버깅을 위해 사용되는 도구로, 조건이 만족되지 않으면 바로 예외를 발생시켜 코드의 잘못된 상태를 조기에 발견할 수 있도록 도와줌
         assert 1 <= self.agents_with_same_goal <= self.n_agents
         if self.agents_with_same_goal > 1:
             assert (
@@ -453,10 +451,3 @@ class HeuristicPolicy(BaseHeuristicPolicy):
         ]
 
         return action
-
-
-if __name__ == "__main__":
-    render_interactively(
-        "cooperative_exploration",
-        control_two_agents=True,
-    )
