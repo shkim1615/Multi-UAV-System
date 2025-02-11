@@ -104,10 +104,28 @@ class Scenario(BaseScenario):
         return world
     
     def reset_world_at(self, env_index = None):
-        return super().reset_world_at(env_index)
+        placable_entities = self._targets[: self.n_targets] + self.world.agents
+        
+        if env_index is None:
+            self.all_time_covered_targets = torch.full(
+                (self.world.batch_dim, self.n_targets),
+                False,
+                device=self.world.device,
+            )
+        else:
+            self.all_time_covered_targets[env_index] = False
+            
+        ScenarioUtils.spawn_entities_randomly(
+            entities=placable_entities,
+            world=self.world,
+            env_index=env_index,
+            min_dist_between_entities=self._min_dist_between_entities,
+            x_bounds=(-self.world.x_semidim, self.world.x_semidim),
+            y_bounds=(-self.world.y_semidim, self.world.y_semidim),
+        )
     
     def reward(self, agent):
-        return super().reward(agent)
+        return 0
     
     def observation(self, agent):
-        return super().observation(agent)
+        pass
