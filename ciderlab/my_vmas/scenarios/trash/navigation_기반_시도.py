@@ -241,6 +241,7 @@ class Scenario(BaseScenario):
         # 현재 받은 매개변수 에이전트가 첫 번째 에이전트인지 확인해서 나온 boolean 값을 넣음
         is_first = agent == self.world.agents[0]
 
+        # 집계 연산 등은 한 번만 수행하여 여러 번 계산하는 것을 피하려는 의도
         if is_first:
             self.pos_rew[:] = 0
             self.final_rew[:] = 0

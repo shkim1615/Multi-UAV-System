@@ -1,5 +1,5 @@
 
-from ciderlab.my_vmas.scenarios.trash.cooperative_exploration import Scenario
+from my_vmas.scenarios.cooperative_exploration import Scenario
 from my_vmas.interactive_rendering import render_interactively
 
 render_interactively(

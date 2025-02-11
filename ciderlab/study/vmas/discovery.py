@@ -45,6 +45,7 @@ class Scenario(BaseScenario):
         self.time_penalty = kwargs.pop("time_penalty", 0)
         ScenarioUtils.check_kwargs_consumed(kwargs)
 
+        # comms_range: 에이전트 간 통신 가능 거리
         self._comms_range = self._lidar_range
         self.min_collision_distance = 0.005
         self.agent_radius = 0.05
@@ -64,6 +65,7 @@ class Scenario(BaseScenario):
             drag=0.25,
         )
 
+        # 에이전트랑 타겟이랑 섞인 엔터티에서 원하는 객체 종류만 골라냄
         # Add agents
         entity_filter_agents: Callable[[Entity], bool] = lambda e: e.name.startswith(
             "agent"
@@ -151,11 +153,14 @@ class Scenario(BaseScenario):
         is_last = agent == self.world.agents[-1]
 
         if is_first:
+            # 시간 패널티 보상 초기화
             self.time_rew = torch.full(
                 (self.world.batch_dim,),
                 self.time_penalty,
                 device=self.world.device,
             )
+            
+            # 에이전트와 타겟의 위치 수집
             self.agents_pos = torch.stack(
                 [a.state.pos for a in self.world.agents], dim=1
             )
