@@ -61,12 +61,12 @@ vmas_device = device  # The device where the simulator is run (VMAS can run on G
 # Sampling
 frames_per_batch = 6_000  # Number of team frames collected per training iteration(반복) 초기 설정 6000
 # 에이전트들이 환경에서 6000 프레임을 수행. 무슨 말이지
-n_iters = 1000  # Number of sampling and training iterations
+n_iters = 100  # Number of sampling and training iterations
 total_frames = frames_per_batch * n_iters
 
 # Training
 num_epochs = 5  # Number of optimization steps per training iteration(30)
-minibatch_size = 400  # Size of the mini-batches in each optimization step
+minibatch_size = 6000  # Size of the mini-batches in each optimization step(400)
 lr = 3e-4  # Learning rate(3e-4)
 max_grad_norm = 1.0  # Maximum norm for the gradients
 # 너무 큰 그래디언트를 방지하여 안정적인 학습을 도움
