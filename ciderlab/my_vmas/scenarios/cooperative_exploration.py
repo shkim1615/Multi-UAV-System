@@ -38,7 +38,7 @@ class Scenario(BaseScenario):
         
         # 보상
         self.shared_reward = kwargs.pop("shared_reward", True)                      # 공유 보상
-        self.agent_collision_penalty = kwargs.pop("agent_collision_penalty", -0.1)
+        self.agent_collision_penalty = kwargs.pop("agent_collision_penalty", -1)
         self.time_penalty = kwargs.pop("time_penalty", -0.01)                           # 시간 패널티
         self.covering_rew_coeff = kwargs.pop("covering_rew_coeff", 1.00)             # 타겟 커버 시 보상 가중치
         
@@ -211,6 +211,9 @@ class Scenario(BaseScenario):
             # 에이전트와 타겟 간의 거리 계산  
             self.agents_targets_dists = torch.cdist(self.agents_pos, self.targets_pos)
             
+            # 타겟 커버 초기화
+            self.covered_targets = torch.zeros(self.world.batch_dim, self.n_targets, device=self.world.device)
+            
             # 공유 보상
             self.covered_targets = (self.agents_targets_dists < self._covering_range).any(dim=1)  
             self.shared_covering_rew = self.covered_targets.float().sum(dim=1) * self.covering_rew_coeff
@@ -264,6 +267,9 @@ class Scenario(BaseScenario):
             dim=-1,
         )
         return observation
+    
+    def done(self):
+        return (self.cost_targets >= self.finish_cost_targets).all(dim=1)
     
     def extra_render(self, env_index: int = 0) -> "List[Geom]":
         from vmas.simulator import rendering

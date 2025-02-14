@@ -47,7 +47,6 @@ from matplotlib import pyplot as plt
 # 결과 시각화
 from tqdm import tqdm
 # 진행 상황을 시각적으로 보여주는 진행 바
-
 # Devices
 is_fork = multiprocessing.get_start_method() == "fork"
 device = (
@@ -62,11 +61,11 @@ vmas_device = device  # The device where the simulator is run (VMAS can run on G
 # Sampling
 frames_per_batch = 6_000  # Number of team frames collected per training iteration(반복) 초기 설정 6000
 # 에이전트들이 환경에서 6000 프레임을 수행. 무슨 말이지
-n_iters = 100  # Number of sampling and training iterations
+n_iters = 1000  # Number of sampling and training iterations
 total_frames = frames_per_batch * n_iters
 
 # Training
-num_epochs = 30  # Number of optimization steps per training iteration
+num_epochs = 5  # Number of optimization steps per training iteration(30)
 minibatch_size = 400  # Size of the mini-batches in each optimization step
 lr = 3e-4  # Learning rate(3e-4)
 max_grad_norm = 1.0  # Maximum norm for the gradients
@@ -78,7 +77,6 @@ gamma = 0.99  # discount factor
 lmbda = 0.9  # lambda for generalised advantage estimation
 entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 # 엔트로피 보너스의 가중치를 조절하는 값. 에이전트의 행동 다양성을 높이기 위해 사용
-
 max_steps = 500  # Episode steps before done, 초기 설정 100
 # 한 에피소드의 스텝 제한
 num_vmas_envs = (
@@ -101,7 +99,6 @@ env = VmasEnv(
     # Scenario kwargs
     n_agents=n_agents,  # These are custom kwargs that change for each VMAS scenario, see the VMAS repo to know more.
 )
-
 print(env._env.scenario.n_targets)
 
 print("action_spec:", env.full_action_spec)     # 행동 공간
@@ -112,7 +109,6 @@ print("observation_spec:", env.observation_spec)    # 환경으로부터 관찰�
 # 아래의 출력이 뭘 뜻하는지는 아직 모르겠는데
 # 나중에 내가 환경을 세팅하면 이에 관해서 확인을 하고 넘어가야하지 않을까..
 # 환경의 설정이 적절한지 세팅값을 확인해보는 것 같음
-
 print("action_keys:", env.action_keys)
 print("reward_keys:", env.reward_keys)
 print("done_keys:", env.done_keys)
@@ -120,7 +116,6 @@ print("done_keys:", env.done_keys)
 # 액션, 보상을 에이전트 별로 구분하여 독립적으로 관리
 # 완료는 에피소드 공통으로 적용
 # tensordict 형식의 데이터를 독립적으로 관리
-
 env = TransformedEnv(
     env,
     RewardSum(in_keys=[env.reward_key], out_keys=[("agents", "episode_reward")]),
@@ -131,16 +126,13 @@ env = TransformedEnv(
 # rewardsum: 보상 합상 변환. 에피소드 전체에 걸쳐 보상을 누적하여 기록
 # in keys: 에이전트 별 보상
 # out keys: 변환 결과 저장 위치, 에이전트의 하위 키인 에피소드 보상에 전체 보상 저장
-
 check_env_specs(env)
 # 환경에서 샘플 데이터를 생성하여 정확히 작동하는지 테스트
-
 n_rollout_steps = 5
 rollout = env.rollout(n_rollout_steps)
 print("rollout of three steps:", rollout)
 print("Shape of the rollout TensorDict:", rollout.batch_size)
 # 세팅 테스트
-
 share_parameters_policy = True
 
 policy_net = torch.nn.Sequential(
@@ -150,7 +142,7 @@ policy_net = torch.nn.Sequential(
         ],  # n_obs_per_agent
         n_agent_outputs=2 * env.action_spec.shape[-1],  # 2 * n_actions_per_agents
         n_agents=env.n_agents,
-        centralised=True,  # the policies are decentralised (ie each agent will act from its observation), False
+        centralised=False,  # the policies are decentralised (ie each agent will act from its observation), False
         share_params=share_parameters_policy,
         device=device,
         depth=2,
@@ -163,7 +155,6 @@ policy_net = torch.nn.Sequential(
 # multiagentmlp: 다층 퍼셉트론 네트워크 설정
 # centralised: 정보를 공유할 건지 선택하는 건데. 아래의 비평가랑 무슨 차이가 있는거지
 # normalparamrxtractor: 네트워크 출력의 마지막 차원을 평균과 표준편차로 나눔
-
 policy_module = TensorDictModule(
     policy_net,
     in_keys=[("agents", "observation")],
@@ -171,7 +162,6 @@ policy_module = TensorDictModule(
 )
 # 신경망을 감싸라는데
 # 입출력을 신경망에 연결시켜주는 거 같음
-
 policy = ProbabilisticActor(
     module=policy_module,
     spec=env.unbatched_action_spec,
@@ -186,7 +176,6 @@ policy = ProbabilisticActor(
     log_prob_key=("agents", "sample_log_prob"),
 )  # we'll need the log-prob for the PPO loss
 # 여기가 전체적인 정책을 정의하는 듯?
-
 share_parameters_critic = True
 mappo = True  # IPPO if False
 # mappo: 전체 관찰 가능성을 갖춘 중앙 비평가
@@ -211,10 +200,8 @@ critic = TensorDictModule(
 )
 
 # 위의 1,2단계랑 상당히 유사함
-
 print("Running policy:", policy(env.reset()))
 print("Running value:", critic(env.reset()))
-
 collector = SyncDataCollector(
     env,
     policy,
@@ -228,7 +215,6 @@ collector = SyncDataCollector(
 # 2. 최신 관찰을 사용하여 정책을 통해 행동 계산
 # 3. 환경에서 스텝 실행
 # 4. 마지막 두 단계를 반복하며, 환경이 멈추라는 신호를 보내거나 done이 될 때까지 계속 실행
-
 replay_buffer = ReplayBuffer(
     storage=LazyTensorStorage(
         frames_per_batch, device=device
@@ -238,7 +224,6 @@ replay_buffer = ReplayBuffer(
 )
 # 학습에 쓴다는데?
 # batch size가 여기서 등장하네?
-
 loss_module = ClipPPOLoss(
     actor_network=policy,
     critic_network=critic,
@@ -263,7 +248,6 @@ loss_module.make_value_estimator(
 GAE = loss_module.value_estimator
 
 optim = torch.optim.Adam(loss_module.parameters(), lr)
-
 pbar = tqdm(total=n_iters, desc="episode_reward_mean = 0")
 # 학습 진행상황 시각화
 
@@ -335,13 +319,11 @@ for tensordict_data in collector:
     pbar.set_description(f"episode_reward_mean = {episode_reward_mean}", refresh=False)
     pbar.update()
     # 진행률 표시줄에 업데이트된 평균 보상 표시
-    
 plt.plot(episode_reward_mean_list)
 plt.xlabel("Training iterations")
 plt.ylabel("Reward")
 plt.title("Episode reward mean")
 plt.show()
-
 import pyvirtualdisplay
 display = pyvirtualdisplay.Display(visible=False, size=(1000, 1000))
 display.start()
@@ -368,4 +350,3 @@ env.frames[0].save(
 
 from IPython.display import Image
 Image(open(f"{scenario_name}.gif", "rb").read())
-
