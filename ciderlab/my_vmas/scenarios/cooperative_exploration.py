@@ -38,8 +38,8 @@ class Scenario(BaseScenario):
         
         # 보상
         self.shared_reward = kwargs.pop("shared_reward", True)                      # 공유 보상
-        self.agent_collision_penalty = kwargs.pop("agent_collision_penalty", 0)
-        self.time_penalty = kwargs.pop("time_penalty", 0)                           # 시간 패널티
+        self.agent_collision_penalty = kwargs.pop("agent_collision_penalty", -0.1)
+        self.time_penalty = kwargs.pop("time_penalty", -0.01)                           # 시간 패널티
         self.covering_rew_coeff = kwargs.pop("covering_rew_coeff", 1.00)             # 타겟 커버 시 보상 가중치
         
         # kwargs에 남아있는 키가 없는지 확인하여 전부 다 사용했는지 확인
@@ -51,6 +51,7 @@ class Scenario(BaseScenario):
         self.target_radius = self.agent_radius
 
         self.target_color = tuple(Color.GREEN.value)
+
         
         world = World(
             batch_dim,
@@ -82,7 +83,6 @@ class Scenario(BaseScenario):
         )
         
         # 에이전트 생성
-        # 현재 라이다 제거 버전
         for i in range(self.n_agents):
             color = (
                 known_colors[i]
@@ -132,9 +132,8 @@ class Scenario(BaseScenario):
         self.shared_covering_reward = torch.zeros(batch_dim, device=device)             # 커버된 타겟 보상
         
         # 타겟 삭제 옵션
-        self.cost_options = torch.tensor([10, 20, 30, 40], device=device)
-        indices = torch.randint(0, 4, (batch_dim, self.n_targets), device=device)
-        self.finish_cost_targets = self.cost_options[indices]
+        self.fixed_costs = torch.tensor([10, 10, 10, 20, 20, 20, 30, 30, 40, 40], device=device)
+        self.finish_cost_targets = self.fixed_costs.unsqueeze(0).repeat(batch_dim, 1)
         self.cost_targets = torch.zeros(batch_dim, self.n_targets, device=device)
         
         
@@ -145,17 +144,23 @@ class Scenario(BaseScenario):
         
         batch_dim = self.world.batch_dim
         device = self.world.device    
-        indices = torch.randint(0, 4, (batch_dim, self.n_targets), device=device)
-        self.finish_cost_targets = self.cost_options[indices]
-        self.cost_targets = torch.zeros(batch_dim, self.n_targets, device=device)
+        
         
         if env_index is None:
+            # self.finish_cost_targets = self.self.fixed_costs.unsqueeze(0).repeat(batch_dim, 1)
+            self.cost_targets = torch.zeros(batch_dim, self.n_targets, device=device)
+            
             self.all_time_covered_targets = torch.full(
                 (self.world.batch_dim, self.n_targets),
                 False,
                 device=self.world.device,
             )
         else:
+            # 특정 환경(env_index)만 초기화
+            # 기존 전체 텐서에서 해당 인덱스만 업데이트
+            # self.finish_cost_targets[env_index] = self.fixed_costs
+            self.cost_targets[env_index] = torch.zeros(1, self.n_targets, device=device)
+            
             self.all_time_covered_targets[env_index] = False
             
         ScenarioUtils.spawn_entities_randomly(
@@ -221,8 +226,7 @@ class Scenario(BaseScenario):
                 mask = self.cost_targets[:, i] >= self.finish_cost_targets[:, i]
                 if mask.any():
                     # get_outside_pos(None)는 (batch_dim, dim_p) 크기의 텐서를 반환합니다.
-                    target.state.pos[mask] = self.get_outside_pos(None)[mask]
-                    
+                    target.state.pos[mask] = self.get_outside_pos(None)[mask]                    
             
         return agent.agent_collision_rew + self.shared_covering_rew + self.time_rew
     
