@@ -87,7 +87,7 @@ num_vmas_envs = (
 custom_scenario = Scenario()
 scenario_name = "cooperative_exploration"
 # vmas에서 제공하는 시뮬레이션 시나리오 중 하나 선택
-n_agents = 4
+n_agents = 1
 
 env = VmasEnv(
     scenario=custom_scenario,

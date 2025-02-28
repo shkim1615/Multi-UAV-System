@@ -32,7 +32,7 @@ class Scenario(BaseScenario):
         self.n_lidar_rays_agents = kwargs.pop("n_lidar_rays_agents", 15)            # 라이다 선 개수
         
         # 타겟
-        self.n_targets = kwargs.pop("n_targets", 10)
+        self.n_targets = kwargs.pop("n_targets", 1)
         self._covering_range = kwargs.pop("covering_range", 0.25)                   # 타겟 내 일정 거리
         self.targets_respawn = kwargs.pop("targets_respawn", True)
         
@@ -40,7 +40,7 @@ class Scenario(BaseScenario):
         self.shared_reward = kwargs.pop("shared_reward", True)                      # 공유 보상
         self.agent_collision_penalty = kwargs.pop("agent_collision_penalty", -1)
         self.time_penalty = kwargs.pop("time_penalty", -0.01)                           # 시간 패널티
-        self.covering_rew_coeff = kwargs.pop("covering_rew_coeff", 10.00)             # 타겟 커버 시 보상 가중치
+        self.covering_rew_coeff = kwargs.pop("covering_rew_coeff", 1.00)             # 타겟 커버 시 보상 가중치
         
         # kwargs에 남아있는 키가 없는지 확인하여 전부 다 사용했는지 확인
         ScenarioUtils.check_kwargs_consumed(kwargs)
@@ -133,7 +133,8 @@ class Scenario(BaseScenario):
         
         # 타겟 삭제 옵션
         self.fixed_costs = torch.tensor([10, 10, 10, 20, 20, 20, 30, 30, 40, 40], device=device)
-        self.finish_cost_targets = self.fixed_costs.unsqueeze(0).repeat(batch_dim, 1)
+        self.selected_costs = self.fixed_costs[: self.n_targets]
+        self.finish_cost_targets = self.selected_costs.unsqueeze(0).repeat(batch_dim, 1)
         self.cost_targets = torch.zeros(batch_dim, self.n_targets, device=device)
         
         
@@ -229,7 +230,10 @@ class Scenario(BaseScenario):
                 mask = self.cost_targets[:, i] >= self.finish_cost_targets[:, i]
                 if mask.any():
                     # get_outside_pos(None)는 (batch_dim, dim_p) 크기의 텐서를 반환합니다.
-                    target.state.pos[mask] = self.get_outside_pos(None)[mask]                    
+                    target.state.pos[mask] = self.get_outside_pos(None)[mask]   
+                    target.active = False
+                
+                                 
             
         return agent.agent_collision_rew + self.shared_covering_rew + self.time_rew
     
@@ -255,7 +259,7 @@ class Scenario(BaseScenario):
 
         # 각 타겟에 대해 에이전트 기준 상대 위치 계산
         target_rel_positions_list = [target.state.pos - pos for target in self._targets]
-        print(target_rel_positions)
+        # print(target_rel_positions)
         # 각 타겟의 상대 위치
         if target_rel_positions_list:
             target_rel_positions = torch.cat(target_rel_positions_list, dim=-1)
@@ -263,21 +267,21 @@ class Scenario(BaseScenario):
             target_rel_positions = torch.tensor([], device=pos.device)
 
         # 최종 관찰 벡터 구성: 에이전트의 상태, 라이다 측정, (옵션) 충돌 정보, 타겟 상대 위치
-        # observation = torch.cat(
-        #     [pos, vel] + collision_info + [target_rel_positions],
-        #     dim=-1,
-        # )
-        
-        # 관찰 정보가 너무 많은 건 아닌지. 상대 정보 말고 타겟 정보만 넣어줘볼까?
         observation = torch.cat(
-            [pos, vel] + collision_info + self._targets,
+            [pos, vel] + collision_info + [target_rel_positions],
             dim=-1,
         )
+        
+        # 관찰 정보가 너무 많은 건 아닌지. 상대 정보 말고 타겟 정보만 넣어줘볼까?
+        # observation = torch.cat(
+        #     [pos, vel] + collision_info + self._targets,
+        #     dim=-1,
+        # )
         return observation
     
     def done(self):
         return (self.cost_targets >= self.finish_cost_targets).all(dim=1)
-    
+        
     def extra_render(self, env_index: int = 0) -> "List[Geom]":
         from vmas.simulator import rendering
 
