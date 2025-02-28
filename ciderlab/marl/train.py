@@ -65,7 +65,7 @@ n_iters = 100  # Number of sampling and training iterations
 total_frames = frames_per_batch * n_iters
 
 # Training
-num_epochs = 5  # Number of optimization steps per training iteration(30)
+num_epochs = 10  # Number of optimization steps per training iteration(30)
 minibatch_size = 6000  # Size of the mini-batches in each optimization step(400)
 lr = 3e-4  # Learning rate(3e-4)
 max_grad_norm = 1.0  # Maximum norm for the gradients
@@ -99,8 +99,6 @@ env = VmasEnv(
     # Scenario kwargs
     n_agents=n_agents,  # These are custom kwargs that change for each VMAS scenario, see the VMAS repo to know more.
 )
-print(env._env.scenario.n_targets)
-
 print("action_spec:", env.full_action_spec)     # 행동 공간
 print("reward_spec:", env.full_reward_spec)     # 보상 영역
 print("done_spec:", env.full_done_spec)         # 완료 영역
@@ -248,12 +246,22 @@ loss_module.make_value_estimator(
 GAE = loss_module.value_estimator
 
 optim = torch.optim.Adam(loss_module.parameters(), lr)
+import os
+print(os.getcwd())
+
 pbar = tqdm(total=n_iters, desc="episode_reward_mean = 0")
 # 학습 진행상황 시각화
 
 episode_reward_mean_list = []
+
+collect_num = 0
+
 # 학습 중 평균 에피소드 보상 저장
 for tensordict_data in collector:
+    # 학습 데이터 기록
+    # torch.save(tensordict_data, f"collected_data/collected_data_{collect_num}.pt")
+    collect_num += 1
+    
     # 수집된 데이터를 반복적으로 처리
     tensordict_data.set(
         ("next", "agents", "done"),
