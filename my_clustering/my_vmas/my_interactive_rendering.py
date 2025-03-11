@@ -18,10 +18,14 @@ from typing import Dict, Union
 import numpy as np
 from torch import Tensor
 
-from my_make_env import make_env
+# from my_make_env import make_env
 from vmas.simulator.environment.gym import GymWrapper
 from vmas.simulator.scenario import BaseScenario
 from vmas.simulator.utils import save_video
+
+import sys
+sys.path.append('/home/ksh-server/workspace/ICUFN/my_clustering')
+from my_vmas.my_make_env import make_env
 
 N_TEXT_LINES_INTERACTIVE = 6
 
@@ -365,7 +369,7 @@ def parse_args():
     parser.add_argument(
         "--scenario",
         type=str,
-        default="waterfall",
+        default="navigation",
         help="Scenario to load. Can be the name of a file in `vmas.scenarios` folder or a :class:`~vmas.simulator.scenario.BaseScenario` class",
     )
     parser.add_argument(

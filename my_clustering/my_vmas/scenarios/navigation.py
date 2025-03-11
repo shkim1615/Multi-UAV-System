@@ -7,12 +7,16 @@ from typing import Callable, Dict, List
 import torch
 from torch import Tensor
 
-from vmas import render_interactively
 from vmas.simulator.core import Agent, Entity, Landmark, Sphere, World
 from vmas.simulator.heuristic_policy import BaseHeuristicPolicy
 from vmas.simulator.scenario import BaseScenario
 from vmas.simulator.sensors import Lidar
 from vmas.simulator.utils import Color, ScenarioUtils, X, Y
+
+import sys
+sys.path.append('/home/ksh-server/workspace/ICUFN/my_clustering')
+from my_vmas.pathfinding.path_finding import random_choice
+from my_vmas.my_interactive_rendering import render_interactively
 
 if typing.TYPE_CHECKING:
     from vmas.simulator.rendering import Geom
@@ -31,10 +35,10 @@ class Scenario(BaseScenario):
         self.collisions = kwargs.pop("collisions", True)
 
         self.world_spawning_x = kwargs.pop(
-            "world_spawning_x", 1
+            "world_spawning_x", 1 * 2
         )  # X-coordinate limit for entities spawning
         self.world_spawning_y = kwargs.pop(
-            "world_spawning_y", 1
+            "world_spawning_y", 1 * 2
         )  # Y-coordinate limit for entities spawning
         self.enforce_bounds = kwargs.pop(
             "enforce_bounds", True
@@ -57,14 +61,18 @@ class Scenario(BaseScenario):
         ScenarioUtils.check_kwargs_consumed(kwargs)
         
         # 타겟 설정
-        self.n_targets_per_agent = kwargs.pop("n_targets_per_agent", 1)
+        self.n_targets_per_agent = kwargs.pop("n_targets_per_agent", 3)
         self.n_targets = self.n_agents * self.n_targets_per_agent
         self.target_radius = kwargs.pop("target_radius", self.agent_radius)
         self.covering_range = kwargs.pop("covering_range", self.target_radius * 2)
-        self.target_temp_color = Color.GREEN
+        self.target_temp_color = Color.BLACK
 
         self.min_distance_between_entities = self.agent_radius * 2 + 0.05
         self.min_collision_distance = 0.005
+        
+        # agents 대기 상태 위치
+        dist = 0.2
+        self.finished_pos = [[Tensor([[dist, dist]])], Tensor([[dist, -dist]]), Tensor([[-dist, -dist]]), Tensor([[-dist, dist]])]
 
         # 월드 크기의 제한이 없는 상태
         if self.enforce_bounds:
@@ -166,6 +174,16 @@ class Scenario(BaseScenario):
             world.add_landmark(goal)
             self.targets.append(goal)
             
+        self.finished_targets = []
+        for i in range(len(self.finished_pos)):
+            goal = Landmark(
+                name=f"goal {i}",
+                collide=False,
+                color=self.target_temp_color,
+            )
+            world.add_landmark(goal)
+            self.finished_targets.append(goal)
+            
         # 타겟을 에이전트마다 할당해주고 경로를 만드는 것은 맵에 스폰이 된 후에 해야 함. 
         # 리셋 월드 함수에서 하는 것이 맞을 듯
         
@@ -202,6 +220,7 @@ class Scenario(BaseScenario):
         # 엔터티 속성으로 에이전트의 객체들이 들어갔기 때문에 위에서는 에이전트의 위치만 설정된 것
         # 각 에이전트마다 목표 객체를 가지고 있으나, 속성만 가질 뿐 위치가 정해진 것이 아님
         # 여기서 랜덤 포지션을 찾아가지고 각 목표에다가 할당을 해주는 것 같군
+        
         goal_poses = []
         for _ in self.targets:
             position = ScenarioUtils.find_random_pos_for_entity(
@@ -215,13 +234,31 @@ class Scenario(BaseScenario):
             goal_poses.append(position.squeeze(1))
             occupied_positions = torch.cat([occupied_positions, position], dim=1)
             
+        # 타겟들의 위치 분배
+        # discovery에 보면 이런 식으로 위치를 할당함
+        for i in range(len(self.targets)):
+            self.targets[i].set_pos(goal_poses[i], batch_index=env_index)
+            
+        for i in range(len(self.finished_targets)):
+            self.finished_targets[i].set_pos(self.finished_pos[i][0], batch_index=env_index)
+            
+        # goal_poses에 지금 위치까지 랜덤으로 정해진 모든 타겟의 정보가 저장되어 있음
+        # 이 정보를 바탕으로 경로를 찾아서 이제 어... 진행을 해야 함
+        
         #################################################################################################################################################
         # path finding
         # 무난하게 시나리오랑 같이 넣어둡시다
-        self.agents_goals = [self.targets[i:i+self.n_targets_per_agent] 
-                             for i in range(0, self.n_agents, self.n_targets_per_agent)]
+       
+        self.agents_path = random_choice(self.world.agents, self.targets)
+        # print(self.agents_path)
+        
         
         #################################################################################################################################################
+
+        # 본인에게 주어진 타겟에 대해서 본인과 동일한 색으로 칠해서 보기 좋게 업그레이드
+        for i in range(len(self.world.agents)):
+            for j in range(self.n_targets_per_agent):
+                self.agents_path[i][j].color = self.world.agents[i].color
 
         # 목표까지의 거리 계산?
         # 목표 까지의 거리를 계산하여 보상 시스템으 초기화
@@ -234,9 +271,9 @@ class Scenario(BaseScenario):
             else:
                 goal_index = 0 if i < self.agents_with_same_goal else i
 
-            self.targets[i].color = agent.color                                                  # 이거는 통째로 설정을 하는 것이..?
-            agent.goal = self.targets[i]
-            agent.goal.set_pos(goal_poses[goal_index], batch_index=env_index)
+            # self.targets[i].color = agent.color                                                  # 이거는 통째로 설정을 하는 것이..?
+            agent.goal = self.agents_path[i][0]
+            # agent.goal.set_pos(goal_poses[goal_index], batch_index=env_index)
 
             if env_index is None:
                 agent.pos_shaping = (
@@ -291,7 +328,26 @@ class Scenario(BaseScenario):
         # 마지막 에이전트를 확인할 때 타겟의 변경 등 추가 사항 점검 필요
         # 스텝 단계가 따로 없음. 여기서 해결 해야 함
         if is_last:
-            pass
+            for agent_idx, agent in enumerate(self.world.agents):
+                # print(agent.on_goal)
+                # print(agent.on_goal.item())
+                if agent.on_goal.item():
+                    if agent.goal != self.finished_targets[agent_idx]:
+                        self.agents_path[agent_idx].pop(0)
+                        if len(self.agents_path[agent_idx]) > 0:
+                            agent.goal = self.agents_path[agent_idx][0]
+                        else:
+                            agent.goal = self.finished_targets[agent_idx]
+                        # agent.goal.set_pos = agent.goal.state.pos
+                        agent.on_goal = False
+                        
+                        agent.pos_shaping = (
+                                torch.linalg.vector_norm(
+                                    agent.state.pos - agent.goal.state.pos,
+                                    dim=1,
+                                )
+                                * self.pos_shaping_factor
+                            )
 
         pos_reward = self.pos_rew if self.shared_rew else agent.pos_rew
         return pos_reward + self.final_rew + agent.agent_collision_rew
@@ -303,7 +359,7 @@ class Scenario(BaseScenario):
             agent.state.pos - agent.goal.state.pos,
             dim=-1,
         )
-        agent.on_goal = agent.distance_to_goal < agent.goal.shape.radius
+        agent.on_goal = agent.distance_to_goal < self.covering_range
 
         pos_shaping = agent.distance_to_goal * self.pos_shaping_factor
         agent.pos_rew = agent.pos_shaping - pos_shaping
@@ -485,8 +541,10 @@ class HeuristicPolicy(BaseHeuristicPolicy):
         return action
 
 
-if __name__ == "__main__":
-    render_interactively(
-        __file__,
-        control_two_agents=True,
-    )
+# if __name__ == "__main__":
+#     render_interactively(
+#         __file__,
+#         control_two_agents=True,
+#     )
+
+# 타겟 인지범위 증가

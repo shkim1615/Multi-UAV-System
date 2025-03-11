@@ -4,10 +4,14 @@
 
 from typing import Optional, Union
 
-import scenarios
+# import scenarios
 from vmas.simulator.environment import Environment, Wrapper
 from vmas.simulator.scenario import BaseScenario
 from vmas.simulator.utils import DEVICE_TYPING
+
+import sys
+sys.path.append('/home/ksh-server/workspace/ICUFN/my_clustering')
+from my_vmas import scenarios
 
 
 def make_env(
