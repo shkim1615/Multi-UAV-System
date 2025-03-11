@@ -48,10 +48,10 @@ class Scenario(BaseScenario):
         self.split_goals = kwargs.pop("split_goals", False)
         self.observe_all_goals = kwargs.pop("observe_all_goals", False)
 
-        self.lidar_range = kwargs.pop("lidar_range", 0.35)
+        self.lidar_range = kwargs.pop("lidar_range", 0.35) # 0.35
         self.agent_radius = kwargs.pop("agent_radius", 0.1)
         self.comms_range = kwargs.pop("comms_range", 0)
-        self.n_lidar_rays = kwargs.pop("n_lidar_rays", 12)
+        self.n_lidar_rays = kwargs.pop("n_lidar_rays", 12)  # 12
 
         self.shared_rew = kwargs.pop("shared_rew", True)
         self.pos_shaping_factor = kwargs.pop("pos_shaping_factor", 1)
@@ -64,7 +64,7 @@ class Scenario(BaseScenario):
         self.n_targets_per_agent = kwargs.pop("n_targets_per_agent", 3)
         self.n_targets = self.n_agents * self.n_targets_per_agent
         self.target_radius = kwargs.pop("target_radius", self.agent_radius)
-        self.covering_range = kwargs.pop("covering_range", self.target_radius * 2)
+        self.covering_range = kwargs.pop("covering_range", self.target_radius * 1.2)
         self.target_temp_color = Color.BLACK
         
         # 타임 패널티
@@ -186,6 +186,10 @@ class Scenario(BaseScenario):
             )
             world.add_landmark(goal)
             self.finished_targets.append(goal)
+            
+        # 타겟 당 코스트 지정
+        self.targets_cur_cost = torch.zeros(batch_dim, self.n_targets, device=device)    # 커버된 타겟 확인용
+        self.targets_cost = torch.tensor([10, 10, 10, 20, 20, 20, 30, 30, 30, 40, 40, 40], device=device)
             
         # 타겟을 에이전트마다 할당해주고 경로를 만드는 것은 맵에 스폰이 된 후에 해야 함. 
         # 리셋 월드 함수에서 하는 것이 맞을 듯
@@ -557,3 +561,8 @@ class HeuristicPolicy(BaseHeuristicPolicy):
 #     )
 
 # 타임 패널티 추가, 타겟 인지 범위 확장
+# 타임 패널티가 없으니 하나만 움직이고 나머지는 멈춰있음
+# 타겟 인지 범위는 너무 넓음. 좀 줄일 것. 현재 1.3배
+# 라이다 세팅 원복. 타겟 인지 범위 1.2배
+# 벡터화 개같이 어려움.
+# 시간이 없으니까 이제는 포기하고 그냥 코스트를 추가해서 실험을 하자고

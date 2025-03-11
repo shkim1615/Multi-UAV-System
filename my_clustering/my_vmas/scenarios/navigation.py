@@ -48,10 +48,10 @@ class Scenario(BaseScenario):
         self.split_goals = kwargs.pop("split_goals", False)
         self.observe_all_goals = kwargs.pop("observe_all_goals", False)
 
-        self.lidar_range = kwargs.pop("lidar_range", 0.35)
+        self.lidar_range = kwargs.pop("lidar_range", 0.35) # 0.35
         self.agent_radius = kwargs.pop("agent_radius", 0.1)
         self.comms_range = kwargs.pop("comms_range", 0)
-        self.n_lidar_rays = kwargs.pop("n_lidar_rays", 12)
+        self.n_lidar_rays = kwargs.pop("n_lidar_rays", 12)  # 12
 
         self.shared_rew = kwargs.pop("shared_rew", True)
         self.pos_shaping_factor = kwargs.pop("pos_shaping_factor", 1)
@@ -64,8 +64,11 @@ class Scenario(BaseScenario):
         self.n_targets_per_agent = kwargs.pop("n_targets_per_agent", 3)
         self.n_targets = self.n_agents * self.n_targets_per_agent
         self.target_radius = kwargs.pop("target_radius", self.agent_radius)
-        self.covering_range = kwargs.pop("covering_range", self.target_radius * 2)
+        self.covering_range = kwargs.pop("covering_range", self.target_radius * 1.2)
         self.target_temp_color = Color.BLACK
+        
+        # 타임 패널티
+        self.time_penalty = kwargs.pop("time_penalty", -0.01)
 
         self.min_distance_between_entities = self.agent_radius * 2 + 0.05
         self.min_collision_distance = 0.005
@@ -184,6 +187,10 @@ class Scenario(BaseScenario):
             world.add_landmark(goal)
             self.finished_targets.append(goal)
             
+        # 타겟 당 코스트 지정
+        self.targets_cur_cost = torch.zeros(batch_dim, self.n_targets, device=device)    # 커버된 타겟 확인용
+        self.targets_cost = torch.tensor([10, 10, 10, 20, 20, 20, 30, 30, 30, 40, 40, 40], device=device)
+            
         # 타겟을 에이전트마다 할당해주고 경로를 만드는 것은 맵에 스폰이 된 후에 해야 함. 
         # 리셋 월드 함수에서 하는 것이 맞을 듯
         
@@ -298,6 +305,12 @@ class Scenario(BaseScenario):
         # 무서우니까 보상 체계는 건드리지 말고
         # 다음 단계로 넘어가기 위해 보상을 건드려야겠군
         if is_first:
+            self.time_rew = torch.full(
+                (self.world.batch_dim,),
+                self.time_penalty,
+                device=self.world.device,
+            )
+            
             self.pos_rew[:] = 0
             self.final_rew[:] = 0
 
@@ -350,7 +363,7 @@ class Scenario(BaseScenario):
                             )
 
         pos_reward = self.pos_rew if self.shared_rew else agent.pos_rew
-        return pos_reward + self.final_rew + agent.agent_collision_rew
+        return pos_reward + self.final_rew + agent.agent_collision_rew + self.time_rew
 
     # 에이전트가 목표 근처에 있으면 보상
     # 거리 기반 보상. 가까이 갈 수록 큰 보상
@@ -547,4 +560,7 @@ class HeuristicPolicy(BaseHeuristicPolicy):
 #         control_two_agents=True,
 #     )
 
-# 타겟 인지범위 증가
+# 타임 패널티 추가, 타겟 인지 범위 확장
+# 타임 패널티가 없으니 하나만 움직이고 나머지는 멈춰있음
+# 타겟 인지 범위는 너무 넓음. 좀 줄일 것. 현재 1.3배
+# 라이다 세팅 원복. 타겟 인지 범위 1.2배
