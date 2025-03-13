@@ -2,9 +2,16 @@ from torch import tensor
 import torch
 from sklearn.cluster import KMeans
 import numpy as np
+from vmas.simulator.core import Landmark
+from vmas.simulator.utils import Color
 
-agents_data = [tensor([[-0.0075,  0.5364]]), tensor([[-0.8230, -0.7359]]), tensor([[-0.3852,  0.2682]]), tensor([[-0.0198,  0.7929]])]
-targets_data = [tensor([[-0.0887,  0.2646]]), tensor([[-0.3022, -0.1966]]), tensor([[0.3953, 0.6000]]), tensor([[ 0.9055, -0.9277]])]
+def print_data():
+    agents_data = [tensor([[-0.0075,  0.5364]]), tensor([[-0.8230, -0.7359]]), tensor([[-0.3852,  0.2682]]), tensor([[-0.0198,  0.7929]])]
+    # targets_data = [tensor([[-0.0887,  0.2646]]), tensor([[-0.3022, -0.1966]]), tensor([[0.3953, 0.6000]]), tensor([[ 0.9055, -0.9277]])]
+    targets_data = [tensor([[-0.0887,  0.2646]]), tensor([[-0.3022, -0.1966]]), tensor([[0.3953, 0.6000]]), tensor([[ 0.9055, -0.9277]]), 
+                    tensor([[-0.6058, -0.0803]]), tensor([[0.2823, 0.4182]]), tensor([[-0.5896,  0.6298]]), tensor([[0.6618, 0.7357]]), 
+                    tensor([[-0.2421, -0.7303]]), tensor([[ 0.4424, -0.0980]]), tensor([[-0.2639,  0.2779]]), tensor([[ 0.6133, -0.0806]])]
+    return agents_data, targets_data
 
 def trans_pos(agents_data, targets_data):
     agents_positions = [t.squeeze(0).numpy().tolist() for t in agents_data]
@@ -16,15 +23,6 @@ def trans_pos(agents_data, targets_data):
 def random_choice(agents, targets):
     n_agents, n_targets = len(agents), len(targets)
     number= n_targets // n_agents
-    # print(agents)
-    # print(targets)
-    # print(n_agents, n_targets)
-    # print(number)
-    
-    # temp = [targets[i:i+number] for i in range(0, n_targets, number)]
-    # print(temp)
-    # temp[0].pop(0)
-    # print(temp)
     
     return [targets[i:i+number] for i in range(0, n_targets, number)]
     

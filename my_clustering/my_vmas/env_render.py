@@ -1,8 +1,8 @@
-from scenarios import navigation
+from my_clustering.my_vmas.scenarios import navigation_random
 from my_interactive_rendering import render_interactively
 
 render_interactively(
-        "navigation_new",
+        "navigation_clustering",
         control_two_agents=True,
         save_render=True,
         display_info=True,
