@@ -15,7 +15,7 @@ from vmas.simulator.utils import Color, ScenarioUtils, X, Y
 
 import sys
 sys.path.append('/home/ksh-server/workspace/ICUFN/my_clustering')
-from my_vmas.pathfinding.path_finding import targets_grouping
+from my_vmas.pathfinding.path_finding import targets_clustering, open_tsp_assignment
 from my_vmas.my_interactive_rendering import render_interactively
 
 if typing.TYPE_CHECKING:
@@ -198,6 +198,8 @@ class Scenario(BaseScenario):
         
         self.pos_rew = torch.zeros(batch_dim, device=device)
         self.final_rew = self.pos_rew.clone()
+        
+        self.device = device
 
         return world
 
@@ -255,35 +257,49 @@ class Scenario(BaseScenario):
         #################################################################################################################################################
         # path finding
         # 무난하게 시나리오랑 같이 넣어둡시다
-        print("agents:")
-        print(self.world.agents)
-        print()
+        # print("agents:")
+        # print(self.world.agents)
+        # print()
         
-        print("agent:")
-        for agent in self.world.agents:
-            print(agent)
-            print()
-        print()
+        # print("agent:")
+        # for agent in self.world.agents:
+        #     print(agent)
+        # print()
         
-        print("targets:")
-        print(self.targets)
-        print()
+        # print("agents positions:")
+        # for agent in self.world.agents:
+        #     print(agent.state.pos)
+        # print()
         
-        print("target:")
-        for target in self.targets:
-            print(target)
-            print()
-        print()    
+        # print("targets:")
+        # print(self.targets)
+        # print()
         
-        self.agents_path = targets_grouping(self.world.agents, self.targets)
+        # print("target:")
+        # for target in self.targets:
+        #     print(target)
+        # print()    
+        
+        # print("targets positions:")
+        # for target in self.targets:
+        #     print(target.state.pos)
+        # print()
+        
+        self.clusters = targets_clustering(self.world.agents, self.targets, self.finished_targets, cost_weight=0.15)
+        self.agents_path, _ = open_tsp_assignment(self.world.agents, self.clusters, self.finished_targets)
+        for route in self.agents_path:
+            for target in route:
+                target.state.pos = target.state.pos.to(self.device)
+                
         # print(self.agents_path)
-        
         #################################################################################################################################################
         #################################################################################################################################################
 
         # 본인에게 주어진 타겟에 대해서 본인과 동일한 색으로 칠해서 보기 좋게 업그레이드
         for i in range(len(self.world.agents)):
-            for j in range(self.n_targets_per_agent):
+            for j in range(len(self.agents_path[i])):
+            #for j in range(self.n_targets_per_agent):
+                # print(i, j)
                 self.agents_path[i][j].color = self.world.agents[i].color
 
         # 목표까지의 거리 계산?
@@ -372,7 +388,7 @@ class Scenario(BaseScenario):
                         else:
                             agent.goal = self.finished_targets[agent_idx]
                         # agent.goal.set_pos = agent.goal.state.pos
-                        agent.on_goal = False
+                        agent.on_goal = torch.tensor([False])
                         
                         agent.pos_shaping = (
                                 torch.linalg.vector_norm(
@@ -399,7 +415,7 @@ class Scenario(BaseScenario):
         if agent.distance_to_goal < self.covering_range:
             if agent.cur_cost < agent.goal.cost:
                 agent.cur_cost += 1
-                agent.stop_rew += 0.1
+                agent.stop_rew += 0.0
             else:
                 agent.on_goal = torch.tensor([True])
                 agent.cur_cost = 0
@@ -441,6 +457,7 @@ class Scenario(BaseScenario):
 
     # 모든 타겟 탐색을 완료하면 종료하도록 조건 수정 필요
     def done(self):
+
         return torch.stack(
             [
                 torch.linalg.vector_norm(
@@ -599,3 +616,4 @@ class HeuristicPolicy(BaseHeuristicPolicy):
 # 라이다 세팅 원복. 타겟 인지 범위 1.2배
 # 벡터화 개같이 어려움.
 # 시간이 없으니까 이제는 포기하고 그냥 코스트를 추가해서 실험을 하자고
+# 지금 done func을 대강 수정했는데, 이게 먹을 것인가 과연. 결국 에러가 났음. 구조적으로 뜯어고쳐야 함. 
