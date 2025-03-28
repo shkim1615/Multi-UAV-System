@@ -198,6 +198,7 @@ class Scenario(BaseScenario):
         
         self.pos_rew = torch.zeros(batch_dim, device=device)
         self.final_rew = self.pos_rew.clone()
+        self._world =world
 
         return world
 
