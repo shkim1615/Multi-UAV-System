@@ -15,7 +15,7 @@ from vmas.simulator.utils import Color, ScenarioUtils, X, Y
 
 import sys
 sys.path.append('/home/ksh-server/workspace/ICUFN/my_clustering')
-from my_vmas.pathfinding.path_finding import targets_clustering, open_tsp_assignment
+from my_vmas.pathfinding.path_finding import kmeans_tsp
 from my_vmas.my_interactive_rendering import render_interactively
 
 if typing.TYPE_CHECKING:
@@ -72,6 +72,10 @@ class Scenario(BaseScenario):
 
         self.min_distance_between_entities = self.agent_radius * 2 + 0.05
         self.min_collision_distance = 0.005
+        
+        # 뷰어 설정
+        self.viewer_size = (700, 700)
+        self.viewer_zoom = 1.5
         
         # agents 대기 상태 위치
         dist = 0.2
@@ -219,7 +223,8 @@ class Scenario(BaseScenario):
             (-self.world_spawning_x, self.world_spawning_x),
             (-self.world_spawning_y, self.world_spawning_y),
         )
-
+        
+       
         occupied_positions = torch.stack(
             [agent.state.pos for agent in self.world.agents], dim=1
         ) 
@@ -258,11 +263,7 @@ class Scenario(BaseScenario):
         #################################################################################################################################################
 
         
-        self.clusters = targets_clustering(self.world.agents, self.targets, self.finished_targets, cost_weight=0.15)
-        self.agents_path, _ = open_tsp_assignment(self.world.agents, self.clusters, self.finished_targets)
-        for route in self.agents_path:
-            for target in route:
-                target.state.pos = target.state.pos.to(self.device)
+        self.agents_path = kmeans_tsp(self.world.agents, self.targets, self.finished_targets)
                 
         # print(self.agents_path)
         #################################################################################################################################################
@@ -430,18 +431,26 @@ class Scenario(BaseScenario):
 
     # 모든 타겟 탐색을 완료하면 종료하도록 조건 수정 필요
     def done(self):
+        for agent in self.world.agents:
+            if agent.goal not in self.finished_targets:
+                return torch.tensor(False)
+            else:
+                if torch.linalg.vector_norm(agent.state.pos - agent.goal.state.pos, dim=-1) >= agent.shape.radius:
+                    return torch.tensor(False)
+        
+        return torch.tensor(True)
 
-        return torch.stack(
-            [
-                torch.linalg.vector_norm(
-                    agent.state.pos - agent.goal.state.pos,
-                    dim=-1,
-                )
-                < agent.shape.radius
-                for agent in self.world.agents
-            ],
-            dim=-1,
-        ).all(-1)
+        # return torch.stack(
+        #     [
+        #         torch.linalg.vector_norm(
+        #             agent.state.pos - agent.goal.state.pos,
+        #             dim=-1,
+        #         )
+        #         < agent.shape.radius
+        #         for agent in self.world.agents
+        #     ],
+        #     dim=-1,
+        # ).all(-1)
 
     def info(self, agent: Agent) -> Dict[str, Tensor]:
         return {
@@ -583,10 +592,13 @@ class HeuristicPolicy(BaseHeuristicPolicy):
 #         control_two_agents=True,
 #     )
 
-# 타임 패널티 추가, 타겟 인지 범위 확장
-# 타임 패널티가 없으니 하나만 움직이고 나머지는 멈춰있음
-# 타겟 인지 범위는 너무 넓음. 좀 줄일 것. 현재 1.3배
-# 라이다 세팅 원복. 타겟 인지 범위 1.2배
-# 벡터화 개같이 어려움.
-# 시간이 없으니까 이제는 포기하고 그냥 코스트를 추가해서 실험을 하자고
-# 지금 done func을 대강 수정했는데, 이게 먹을 것인가 과연. 결국 에러가 났음. 구조적으로 뜯어고쳐야 함. 
+# done 조건은 완료했음
+# 도착 지점과 타겟 지점이 겹치지 않게 자리를 잡도록 해야하는데. 그 방법은 무엇일까
+# 서로 위치 겹치지 않도록 조정 완료. 
+# 랜더링을 손보는 중. 
+# 논문을 쓰기위해서 내가 필요한 자료는 무엇일까. 각종 데이터는 어떤 방식으로 저장을 해야하는 것일까.
+# done을 손본 직후에는 작동을 잘 하였다. 
+# 랜더링과 타겟 위치 설정을 건드리고 난 다음에 개지랄이 났는데. 
+# 아마도 랜더링은 무관할 것이라 생각된다. 타겟 위치 설정을 원복 시키도록 하겠다.
+# 타겟의 위치를 건드리면 이상하게 학습도 안되고 에러가 나는 미친 상황이 발생함....
+# 원래대로 냅두고 문제가 생기는 에피소드를 제거하는 얌생이 방법을 사용해야 겠음
